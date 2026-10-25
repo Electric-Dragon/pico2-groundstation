@@ -1,0 +1,22 @@
+services:
+  gcs:
+    build: .
+    image: pico-groundstation
+    ## Settings: GCS_* variables from .env (see .env.example). Optional, so the
+    ## stack still starts with defaults when there is no .env.
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      ## The Pico sends to the host's LAN IP on this port. Compose reads GCS_PORT
+      ## from .env for this line too, so both sides stay in sync.
+      - "${GCS_PORT:-5005}:${GCS_PORT:-5005}/udp"
+    volumes:
+      ## Calibration images, calib.npz and snapshots, read and written by the
+      ## container and shared with the host.
+      - ./data:/app/data
+    stop_signal: SIGTERM
+    ## Default command: link check (pairs/s and drop counters).
+    ## Other tasks run as one-offs, e.g.
+    ##   docker compose run --rm --service-ports gcs python -m modules.calibrate capture --headless
+    command: ["python", "-m", "modules.receiver"]
