@@ -78,6 +78,8 @@ rectification crop). Precedence: command-line flag > environment variable >
 
 ## Running (natively, e.g. on a Mac)
 
+Get the IP address for the Pico system through: `ipconfig getifaddr en0`
+
 Run from the repo root. `calibrate.py` and `rectify.py` can also be run as files,
 e.g. `uv run modules/calibrate.py ...`.
 
