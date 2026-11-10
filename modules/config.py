@@ -50,5 +50,14 @@ PATTERN: str = _get("GCS_PATTERN", "8x5")
 SQUARE_MM: float | None = _get("GCS_SQUARE_MM", None, float)
 ALPHA: float = _get("GCS_ALPHA", 0.0, float)
 
+## ---- depth (stereo matching) ----
+DEPTH_ALGO: str = _get("GCS_DEPTH_ALGO", "sgbm")  # sgbm | census-sgm | elas
+NUM_DISPARITIES: int = _get("GCS_NUM_DISPARITIES", 64, _int)  # search range 0..N-1 px
+SGBM_BLOCK_SIZE: int = _get("GCS_SGBM_BLOCK_SIZE", 5, _int)
+CENSUS_WINDOW: str = _get("GCS_CENSUS_WINDOW", "9x7")
+SGM_P1: int = _get("GCS_SGM_P1", 10, _int)
+SGM_P2: int = _get("GCS_SGM_P2", 120, _int)
+SGM_PATHS: int = _get("GCS_SGM_PATHS", 8, _int)
+
 if CAM_LEFT == CAM_RIGHT:
     raise SystemExit(f"GCS_CAM_LEFT and GCS_CAM_RIGHT are both {CAM_LEFT}")
