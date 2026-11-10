@@ -11,6 +11,7 @@ camera-calibration tutorial, extended to a stereo pair.
   uv run python -m modules.calibrate capture --pattern 8x5
   uv run python -m modules.calibrate solve --pattern 8x5 --square-mm 30
 """
+
 import argparse
 import logging
 import signal
@@ -41,11 +42,21 @@ MIN_VIEWS = 10
 DEFAULT_IMAGES = config.DATA_DIR / "calib"
 DEFAULT_OUTPUT = DEFAULT_CALIB
 WINDOW = "calibration capture"
-CELL_NAMES = ["top-left", "top", "top-right", "left", "centre", "right",
-              "bottom-left", "bottom", "bottom-right"]
+CELL_NAMES = [
+    "top-left",
+    "top",
+    "top-right",
+    "left",
+    "centre",
+    "right",
+    "bottom-left",
+    "bottom",
+    "bottom-right",
+]
 
 
 ## ---- board detection -------------------------------------------------------
+
 
 def parse_pattern(s: str) -> tuple[int, int]:
     """'8x5' -> (8, 5): inner corners per row, per column."""
@@ -61,7 +72,9 @@ def board_points(pattern: tuple[int, int], square_mm: float) -> np.ndarray:
     return objp
 
 
-def find_corners(gray: np.ndarray, pattern: tuple[int, int], fast: bool = False) -> np.ndarray | None:
+def find_corners(
+    gray: np.ndarray, pattern: tuple[int, int], fast: bool = False
+) -> np.ndarray | None:
     flags = cv.CALIB_CB_ADAPTIVE_THRESH | cv.CALIB_CB_NORMALIZE_IMAGE
     if fast:
         flags |= cv.CALIB_CB_FAST_CHECK  # bails out quickly on frames with no board
@@ -96,6 +109,7 @@ def _mean_dist(a: np.ndarray, b: np.ndarray) -> float:
 
 
 ## ---- capture ---------------------------------------------------------------
+
 
 class PairStore:
     """Writes pairs as NNNN_L.png / NNNN_R.png, continuing after any already in the folder.
@@ -152,8 +166,13 @@ class AutoCapture:
         return all(min(_mean_dist(c, s), _mean_dist(c[::-1], s)) > self.novel_px for s in seen)
 
 
-def _draw_view(gray: np.ndarray, corners: np.ndarray | None, pattern: tuple[int, int],
-               seen: list[np.ndarray], scale: int) -> np.ndarray:
+def _draw_view(
+    gray: np.ndarray,
+    corners: np.ndarray | None,
+    pattern: tuple[int, int],
+    seen: list[np.ndarray],
+    scale: int,
+) -> np.ndarray:
     img = cv.resize(gray, None, fx=scale, fy=scale, interpolation=cv.INTER_NEAREST)
     img = cv.cvtColor(img, cv.COLOR_GRAY2BGR)
     for s in seen:  # corners of earlier saves, to show which areas are covered
@@ -175,8 +194,12 @@ def capture(args: argparse.Namespace) -> None:
     size = None
     shown = False
     last_log = time.monotonic()
-    log.info("saving to %s, pattern %dx%d, %s", args.images, *args.pattern,
-             f"auto-capturing {args.target} pairs" if headless else "space = save, a = auto, q = quit")
+    log.info(
+        "saving to %s, pattern %dx%d, %s",
+        args.images,
+        *args.pattern,
+        f"auto-capturing {args.target} pairs" if headless else "space = save, a = auto, q = quit",
+    )
 
     with Receiver(args.port, args.host, args.source) as rx:
         while not (headless and auto.count >= args.target):
@@ -185,23 +208,46 @@ def capture(args: argparse.Namespace) -> None:
             save = False
             if pair is not None:
                 size = pair.left.image.shape[::-1]
-                corners = (find_corners(pair.left.image, args.pattern, fast=True),
-                           find_corners(pair.right.image, args.pattern, fast=True))
+                corners = (
+                    find_corners(pair.left.image, args.pattern, fast=True),
+                    find_corners(pair.right.image, args.pattern, fast=True),
+                )
                 latest = (pair, corners)
                 save = auto_on and auto.update(corners, now)
 
             if not headless:
                 if pair is not None:
-                    view = np.hstack([
-                        _draw_view(pair.left.image, corners[0], args.pattern, auto.saved[0], args.scale),
-                        _draw_view(pair.right.image, corners[1], args.pattern, auto.saved[1], args.scale)])
-                    cv.putText(view, f"saved {auto.count} (both {auto.stereo})  auto {'on' if auto_on else 'off'}"
-                               "   [space] save  [a] auto  [q] quit",
-                               (8, 20), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv.LINE_AA)
+                    view = np.hstack(
+                        [
+                            _draw_view(
+                                pair.left.image, corners[0], args.pattern, auto.saved[0], args.scale
+                            ),
+                            _draw_view(
+                                pair.right.image,
+                                corners[1],
+                                args.pattern,
+                                auto.saved[1],
+                                args.scale,
+                            ),
+                        ]
+                    )
+                    cv.putText(
+                        view,
+                        f"saved {auto.count} (both {auto.stereo})  auto {'on' if auto_on else 'off'}"
+                        "   [space] save  [a] auto  [q] quit",
+                        (8, 20),
+                        cv.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        1,
+                        cv.LINE_AA,
+                    )
                     cv.imshow(WINDOW, view)
                     shown = True
                 key = cv.waitKey(1) & 0xFF
-                if key == ord("q") or (shown and cv.getWindowProperty(WINDOW, cv.WND_PROP_VISIBLE) < 1):
+                if key == ord("q") or (
+                    shown and cv.getWindowProperty(WINDOW, cv.WND_PROP_VISIBLE) < 1
+                ):
                     break
                 if key == ord("a"):
                     auto_on = not auto_on
@@ -220,31 +266,42 @@ def capture(args: argparse.Namespace) -> None:
                 if size is None:
                     log.info("waiting for frames on port %d ... %s", args.port, rx.asm.stats)
                 else:
-                    log.info("saved %d (both %d)  not yet covered: left %s, right %s",
-                             auto.count, auto.stereo,
-                             missing_cells(auto.saved[0], size) or "-",
-                             missing_cells(auto.saved[1], size) or "-")
+                    log.info(
+                        "saved %d (both %d)  not yet covered: left %s, right %s",
+                        auto.count,
+                        auto.stereo,
+                        missing_cells(auto.saved[0], size) or "-",
+                        missing_cells(auto.saved[1], size) or "-",
+                    )
 
     if not headless:
         cv.destroyAllWindows()
-    log.info("captured %d pairs (%d with the board in both) in %s", auto.count, auto.stereo, args.images)
+    log.info(
+        "captured %d pairs (%d with the board in both) in %s", auto.count, auto.stereo, args.images
+    )
 
 
 ## ---- solve -----------------------------------------------------------------
 
-def _calibrate_mono(name: str, views: list[tuple[str, np.ndarray]], objp: np.ndarray,
-                    size: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, float]:
+
+def _calibrate_mono(
+    name: str, views: list[tuple[str, np.ndarray]], objp: np.ndarray, size: tuple[int, int]
+) -> tuple[np.ndarray, np.ndarray, float]:
     if len(views) < MIN_VIEWS:
         sys.exit(f"{name}: board found in only {len(views)} images, need at least {MIN_VIEWS}")
     imgpoints = [c for _, c in views]
     rms, K, D, rvecs, tvecs = cv.calibrateCamera([objp] * len(views), imgpoints, size, None, None)
-    errs = [float(np.sqrt(np.mean(np.sum((cv.projectPoints(objp, rv, tv, K, D)[0] - c) ** 2, axis=2))))
-            for rv, tv, c in zip(rvecs, tvecs, imgpoints)]
+    errs = [
+        float(np.sqrt(np.mean(np.sum((cv.projectPoints(objp, rv, tv, K, D)[0] - c) ** 2, axis=2))))
+        for rv, tv, c in zip(rvecs, tvecs, imgpoints)
+    ]
     log.info("%s: %d views, RMS reprojection error %.3f px", name, len(views), rms)
     limit = 2 * float(np.median(errs))
     bad = [f"{stem} ({e:.2f} px)" for (stem, _), e in zip(views, errs) if e > limit]
     if bad:
-        log.info("%s: views well above the median error, consider deleting: %s", name, ", ".join(bad))
+        log.info(
+            "%s: views well above the median error, consider deleting: %s", name, ", ".join(bad)
+        )
     return K, D, rms
 
 
@@ -268,26 +325,60 @@ def solve(args: argparse.Namespace) -> None:
             log.warning("%s: size differs from %dx%d, skipped", stem, *size)
             continue
         views.append((stem, find_corners(gl, args.pattern), find_corners(gr, args.pattern)))
-    log.info("%d pairs at %dx%d: board found in %d left, %d right, %d both",
-             len(views), *size, sum(l is not None for _, l, _ in views),
-             sum(r is not None for _, _, r in views),
-             sum(l is not None and r is not None for _, l, r in views))
+    log.info(
+        "%d pairs at %dx%d: board found in %d left, %d right, %d both",
+        len(views),
+        *size,
+        sum(l is not None for _, l, _ in views),
+        sum(r is not None for _, _, r in views),
+        sum(l is not None and r is not None for _, l, r in views),
+    )
 
-    K_l, D_l, rms_l = _calibrate_mono("left", [(s, l) for s, l, _ in views if l is not None], objp, size)
-    K_r, D_r, rms_r = _calibrate_mono("right", [(s, r) for s, _, r in views if r is not None], objp, size)
+    K_l, D_l, rms_l = _calibrate_mono(
+        "left", [(s, l) for s, l, _ in views if l is not None], objp, size
+    )
+    K_r, D_r, rms_r = _calibrate_mono(
+        "right", [(s, r) for s, _, r in views if r is not None], objp, size
+    )
 
     stereo = [(l, match_orientation(l, r)) for _, l, r in views if l is not None and r is not None]
     if len(stereo) < MIN_VIEWS:
-        sys.exit(f"board found in both cameras in only {len(stereo)} pairs, need at least {MIN_VIEWS}")
+        sys.exit(
+            f"board found in both cameras in only {len(stereo)} pairs, need at least {MIN_VIEWS}"
+        )
     rms_s, _, _, _, _, R, T, E, F = cv.stereoCalibrate(
-        [objp] * len(stereo), [l for l, _ in stereo], [r for _, r in stereo],
-        K_l, D_l, K_r, D_r, size, criteria=criteria, flags=cv.CALIB_FIX_INTRINSIC)
-    log.info("stereo: %d pairs, RMS reprojection error %.3f px, baseline %.1f mm",
-             len(stereo), rms_s, float(np.linalg.norm(T)))
+        [objp] * len(stereo),
+        [l for l, _ in stereo],
+        [r for _, r in stereo],
+        K_l,
+        D_l,
+        K_r,
+        D_r,
+        size,
+        criteria=criteria,
+        flags=cv.CALIB_FIX_INTRINSIC,
+    )
+    log.info(
+        "stereo: %d pairs, RMS reprojection error %.3f px, baseline %.1f mm",
+        len(stereo),
+        rms_s,
+        float(np.linalg.norm(T)),
+    )
 
-    calib = dict(image_size=np.array(size), K_l=K_l, D_l=D_l, K_r=K_r, D_r=D_r, R=R, T=T, E=E, F=F,
-                 rms=np.array([rms_l, rms_r, rms_s]), pattern=np.array(args.pattern),
-                 square_mm=np.array(args.square_mm))
+    calib = dict(
+        image_size=np.array(size),
+        K_l=K_l,
+        D_l=D_l,
+        K_r=K_r,
+        D_r=D_r,
+        R=R,
+        T=T,
+        E=E,
+        F=F,
+        rms=np.array([rms_l, rms_r, rms_s]),
+        pattern=np.array(args.pattern),
+        square_mm=np.array(args.square_mm),
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez(args.output, **calib)
     log.info("wrote %s", args.output)
@@ -298,19 +389,33 @@ def solve(args: argparse.Namespace) -> None:
 def check_rectification(calib, stereo, views, args) -> None:
     """After rectification a board corner should sit on the same row in both images."""
     rect = Rectifier(calib).at()
-    dy = np.concatenate([
-        np.abs(rect.rectify_points(l)[..., 1] - rect.rectify_points(r, right=True)[..., 1]).ravel()
-        for l, r in stereo])
-    log.info("rectified row mismatch: mean %.2f px, max %.2f px (well under 1 px is good)",
-             dy.mean(), dy.max())
+    dy = np.concatenate(
+        [
+            np.abs(
+                rect.rectify_points(l)[..., 1] - rect.rectify_points(r, right=True)[..., 1]
+            ).ravel()
+            for l, r in stereo
+        ]
+    )
+    log.info(
+        "rectified row mismatch: mean %.2f px, max %.2f px (well under 1 px is good)",
+        dy.mean(),
+        dy.max(),
+    )
 
     stem = next(s for s, l, r in views if l is not None and r is not None)
-    left, right = rect.rectify(*(cv.imread(str(args.images / f"{stem}_{side}.png"), cv.IMREAD_GRAYSCALE)
-                                 for side in ("L", "R")))
+    left, right = rect.rectify(
+        *(
+            cv.imread(str(args.images / f"{stem}_{side}.png"), cv.IMREAD_GRAYSCALE)
+            for side in ("L", "R")
+        )
+    )
     view = draw_rows(np.hstack([left, right]))
     out = args.output.with_name("rectify_check.png")
     cv.imwrite(str(out), view)
-    log.info("wrote %s (pair %s rectified, features should line up along the green rows)", out, stem)
+    log.info(
+        "wrote %s (pair %s rectified, features should line up along the green rows)", out, stem
+    )
     if args.show:
         cv.imshow("rectification check", view)
         cv.waitKey(0)
@@ -319,12 +424,21 @@ def check_rectification(calib, stereo, views, args) -> None:
 
 ## ---- CLI -------------------------------------------------------------------
 
+
 def main() -> None:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--pattern", type=parse_pattern, default=config.PATTERN,
-                        help=f"inner corners as COLSxROWS (default {config.PATTERN})")
-    common.add_argument("--images", type=Path, default=DEFAULT_IMAGES,
-                        help=f"folder of NNNN_L.png / NNNN_R.png pairs (default {DEFAULT_IMAGES})")
+    common.add_argument(
+        "--pattern",
+        type=parse_pattern,
+        default=config.PATTERN,
+        help=f"inner corners as COLSxROWS (default {config.PATTERN})",
+    )
+    common.add_argument(
+        "--images",
+        type=Path,
+        default=DEFAULT_IMAGES,
+        help=f"folder of NNNN_L.png / NNNN_R.png pairs (default {DEFAULT_IMAGES})",
+    )
 
     parser = argparse.ArgumentParser(description="Stereo calibration for the Pico ground station.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -338,8 +452,13 @@ def main() -> None:
     cap.add_argument("--scale", type=int, default=2, help="window: preview magnification")
 
     sol = sub.add_parser("solve", parents=[common], help="calibrate from saved pairs")
-    sol.add_argument("--square-mm", type=float, default=config.SQUARE_MM, required=config.SQUARE_MM is None,
-                     help="measured square size in mm (or GCS_SQUARE_MM in .env)")
+    sol.add_argument(
+        "--square-mm",
+        type=float,
+        default=config.SQUARE_MM,
+        required=config.SQUARE_MM is None,
+        help="measured square size in mm (or GCS_SQUARE_MM in .env)",
+    )
     sol.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     sol.add_argument("--show", action="store_true", help="show the rectification check in a window")
 

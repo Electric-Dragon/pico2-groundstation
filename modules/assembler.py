@@ -3,6 +3,7 @@
 The cameras are hardware-synced, so both halves of a pair share a frame_id.
 Output is in frame_id order: once a pair is emitted, anything older is dropped.
 """
+
 import logging
 import time
 from collections.abc import Callable
@@ -42,12 +43,12 @@ class StereoPair:
 @dataclass(slots=True)
 class Stats:
     chunks: int = 0
-    malformed: int = 0   # failed to parse
-    rejected: int = 0    # unknown cam_id, size mismatch, duplicate or stale
+    malformed: int = 0  # failed to parse
+    rejected: int = 0  # unknown cam_id, size mismatch, duplicate or stale
     pairs: int = 0
     incomplete: int = 0  # frames dropped with rows missing
-    unpaired: int = 0    # complete frames whose partner never completed
-    skewed: int = 0      # pairs dropped for exceeding max_skew_us
+    unpaired: int = 0  # complete frames whose partner never completed
+    skewed: int = 0  # pairs dropped for exceeding max_skew_us
     resets: int = 0
 
 
@@ -71,8 +72,12 @@ class _Partial:
 class StereoAssembler:
     """Feed it datagrams with push(); it returns a StereoPair when one completes."""
 
-    def __init__(self, timeout_s: float = config.FRAME_TIMEOUT_S, max_skew_us: int = config.MAX_SKEW_US,
-                 clock: Callable[[], float] = time.monotonic):
+    def __init__(
+        self,
+        timeout_s: float = config.FRAME_TIMEOUT_S,
+        max_skew_us: int = config.MAX_SKEW_US,
+        clock: Callable[[], float] = time.monotonic,
+    ):
         self.timeout_s = timeout_s
         self.max_skew_us = max_skew_us
         self.stats = Stats()
@@ -104,8 +109,11 @@ class StereoAssembler:
             if self._last_emitted - hdr.frame_id < RESET_WINDOW:
                 self.stats.rejected += 1  # late chunk for an emitted or superseded frame
                 return None
-            log.warning("frame_id jumped back from %d to %d, assuming Pico restart",
-                        self._last_emitted, hdr.frame_id)
+            log.warning(
+                "frame_id jumped back from %d to %d, assuming Pico restart",
+                self._last_emitted,
+                hdr.frame_id,
+            )
             self.stats.resets += 1
             self.reset()
 
@@ -140,8 +148,11 @@ class StereoAssembler:
         self._last_emitted = pair.frame_id
         if pair.skew_us > self.max_skew_us:
             self.stats.skewed += 1
-            log.warning("frame %d: left/right capture times differ by %d us, sync broken?",
-                        pair.frame_id, pair.skew_us)
+            log.warning(
+                "frame %d: left/right capture times differ by %d us, sync broken?",
+                pair.frame_id,
+                pair.skew_us,
+            )
             return None
         self.stats.pairs += 1
         return pair
