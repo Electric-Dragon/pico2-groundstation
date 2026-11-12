@@ -53,7 +53,7 @@ class Stats:
 
 
 class _Partial:
-    __slots__ = ("hdr", "image", "rows", "missing", "first_seen")
+    __slots__ = ("first_seen", "hdr", "image", "missing", "rows")
 
     def __init__(self, hdr: ChunkHeader, now: float):
         self.hdr = hdr

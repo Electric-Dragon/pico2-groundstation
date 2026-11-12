@@ -19,6 +19,7 @@ COLORS = ["tab:red", "tab:blue", "tab:green", "tab:orange"]
 
 SCRATCH = Path(__file__).resolve().parent.parent / "scratch"
 
+
 def draw_polytope(ax, poly, color):
     """Draw polytope edges in the (X, Z, -Y) view used for the scatter plot."""
     v = poly.vertices()
@@ -73,6 +74,7 @@ def main():
     plt.tight_layout()
     SCRATCH.mkdir(exist_ok=True)
     plt.savefig(SCRATCH / "demo.png", dpi=150)
+
 
 if __name__ == "__main__":
     main()

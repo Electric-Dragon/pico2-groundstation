@@ -9,7 +9,9 @@ from polytope3d.synthetic import Box, make_box_surface_cloud
 
 def sphere_cloud(n=6000, radius=0.5, seed=0):
     v = np.random.default_rng(seed).normal(size=(n, 3))
-    return (radius * v / np.linalg.norm(v, axis=1, keepdims=True) + [0.0, 0.5, 3.0]).astype(np.float32)
+    return (radius * v / np.linalg.norm(v, axis=1, keepdims=True) + [0.0, 0.5, 3.0]).astype(
+        np.float32
+    )
 
 
 def rotated_box_cloud(angle_deg=30.0, n=6000):
@@ -60,7 +62,9 @@ def test_small_hull_is_returned_unchanged_in_volume():
 
 def test_boundedness_check():
     assert _is_bounded(np.vstack([np.eye(3), -np.eye(3)]))
-    assert not _is_bounded(np.array([[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0], [1, 1, 1] / np.sqrt(3)]))
+    assert not _is_bounded(
+        np.array([[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0], [1, 1, 1] / np.sqrt(3)])
+    )
 
 
 def test_bad_arguments_and_degenerate_input():

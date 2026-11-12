@@ -19,6 +19,7 @@ ALL_FITTERS = {**ALGORITHMS, **MULTI_ALGORITHMS}
 
 SCRATCH = Path(__file__).resolve().parent.parent / "scratch"
 
+
 def rotated_box_cloud(n):
     pts = make_box_surface_cloud(Box((-0.5, -0.2, -0.3), (0.5, 0.2, 0.3)), n).astype(np.float64)
     a = np.radians(30.0)
@@ -41,7 +42,11 @@ def l_shape_cloud(n):
 
     pa = make_box_surface_cloud(arm_a, n // 2, seed=1)
     pb = make_box_surface_cloud(arm_b, n // 2, seed=2)
-    return np.vstack([pa[~strictly_inside(pa, arm_b)], pb[~strictly_inside(pb, arm_a)]]) + [0.0, 0.5, 3.0]
+    return np.vstack([pa[~strictly_inside(pa, arm_b)], pb[~strictly_inside(pb, arm_a)]]) + [
+        0.0,
+        0.5,
+        3.0,
+    ]
 
 
 def median_ms(fit, pts, repeats):

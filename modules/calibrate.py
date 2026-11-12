@@ -27,8 +27,8 @@ if __name__ == "__main__" and not __package__:
 import cv2 as cv
 import numpy as np
 
-from .assembler import StereoPair
 from . import config
+from .assembler import StereoPair
 from .receiver import Receiver, no_display
 from .rectify import DEFAULT_CALIB, Rectifier, draw_rows
 

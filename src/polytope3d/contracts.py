@@ -24,9 +24,7 @@ class Intrinsics:
 
     def matrix(self):
         """The 3x3 camera matrix K that maps camera-frame points to pixels."""
-        return np.array(
-            [[self.fx, 0.0, self.cx], [0.0, self.fy, self.cy], [0.0, 0.0, 1.0]]
-        )
+        return np.array([[self.fx, 0.0, self.cx], [0.0, self.fy, self.cy], [0.0, 0.0, 1.0]])
 
 
 @dataclass(frozen=True, eq=False)
@@ -54,6 +52,7 @@ class DepthFrame:
     def valid_mask(self):
         """True where the depth is a usable measurement (finite and > 0)."""
         return np.isfinite(self.depth) & (self.depth > 0)
+
 
 @dataclass(frozen=True, eq=False)
 class Plane:

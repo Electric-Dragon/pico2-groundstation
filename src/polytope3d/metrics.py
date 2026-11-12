@@ -47,7 +47,10 @@ def estimated_bytes(polytopes):
     """Rough float32 payload size. Fixed-direction methods send one offset per plane; the
     others send a normal and an offset (4 floats). A sizing estimate, not a packet format."""
     return int(
-        sum(p.n_planes * (4 if p.method in FIXED_DIRECTION_METHODS else 16) for p in _as_list(polytopes))
+        sum(
+            p.n_planes * (4 if p.method in FIXED_DIRECTION_METHODS else 16)
+            for p in _as_list(polytopes)
+        )
     )
 
 

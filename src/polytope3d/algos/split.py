@@ -42,14 +42,12 @@ def _recurse(pts, poly, base, depth, max_depth, min_points, improvement):
     if best is None or best[0] >= improvement * _volume(poly):
         return [poly]
     _, left, right, poly_left, poly_right = best
-    return _recurse(left, poly_left, base, depth + 1, max_depth, min_points, improvement) + _recurse(
-        right, poly_right, base, depth + 1, max_depth, min_points, improvement
-    )
+    return _recurse(
+        left, poly_left, base, depth + 1, max_depth, min_points, improvement
+    ) + _recurse(right, poly_right, base, depth + 1, max_depth, min_points, improvement)
 
 
-def fit_split(
-    points, base=fit_obb, obstacle_id=0, max_depth=3, min_points=30, improvement=0.8
-):
+def fit_split(points, base=fit_obb, obstacle_id=0, max_depth=3, min_points=30, improvement=0.8):
     """Fit several polytopes to one cluster by recursively cutting it in two.
 
     A cut at the centroid, perpendicular to a principal axis, is kept only if the two halves'

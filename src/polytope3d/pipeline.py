@@ -102,9 +102,7 @@ def run_pipeline(frame, config=None):
 
     with _timed(timings, "floor"):
         try:
-            floor = fit_floor_plane(
-                points, config.floor_threshold, config.floor_threshold_per_z2
-            )
+            floor = fit_floor_plane(points, config.floor_threshold, config.floor_threshold_per_z2)
             above = split_by_plane(
                 points, floor, config.floor_threshold, config.floor_threshold_per_z2
             )[0]
@@ -136,7 +134,9 @@ def run_pipeline(frame, config=None):
             with _timed(timings, f"fit_{name}"):
                 try:
                     parts = _fit(name, cluster, k)
-                    fits[name] = [p.inflated(config.margin) if config.margin > 0 else p for p in parts]
+                    fits[name] = [
+                        p.inflated(config.margin) if config.margin > 0 else p for p in parts
+                    ]
                 except DegenerateGeometry as exc:
                     failures[name] = str(exc)
         obstacles.append(Obstacle(id=k, points=cluster, polytopes=fits, failures=failures))
