@@ -3,6 +3,7 @@ queues completed stereo pairs for whatever consumes them.
 
 Run directly to check the link:  uv run python -m modules.receiver [--port N] [--show]
 """
+
 import argparse
 import logging
 import os
@@ -12,6 +13,7 @@ import socket
 import sys
 import threading
 import time
+from typing import Self
 
 import numpy as np
 
@@ -24,15 +26,21 @@ log = logging.getLogger(__name__)
 def no_display() -> bool:
     """True when no window can be opened (e.g. Linux in Docker), so CLIs go headless."""
     return sys.platform.startswith("linux") and not (
-        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    )
 
 
 class Receiver:
     """Owns the socket and assembler. Use as a context manager, then call get()."""
 
-    def __init__(self, port: int = config.PORT, host: str = config.HOST,
-                 source: str | None = config.SOURCE, rcvbuf: int = config.RCVBUF,
-                 assembler: StereoAssembler | None = None):
+    def __init__(
+        self,
+        port: int = config.PORT,
+        host: str = config.HOST,
+        source: str | None = config.SOURCE,
+        rcvbuf: int = config.RCVBUF,
+        assembler: StereoAssembler | None = None,
+    ):
         self.asm = assembler or StereoAssembler()
         self.source = source
         self.dropped = 0  # pairs discarded because the consumer fell behind
@@ -61,7 +69,7 @@ class Receiver:
             self._thread.join()
         self.sock.close()
 
-    def __enter__(self) -> "Receiver":
+    def __enter__(self) -> Self:
         return self.start()
 
     def __exit__(self, *exc) -> None:
@@ -102,7 +110,9 @@ class Receiver:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Receive stereo frames from the Pico and report link health.")
+    parser = argparse.ArgumentParser(
+        description="Receive stereo frames from the Pico and report link health."
+    )
     parser.add_argument("--port", type=int, default=config.PORT)
     parser.add_argument("--host", default=config.HOST)
     parser.add_argument("--source", default=config.SOURCE, help="only accept chunks from this IP")
@@ -134,11 +144,16 @@ def main() -> None:
 
                 now = time.monotonic()
                 if now - last >= 1.0:
-                    size = f"{latest.left.image.shape[1]}x{latest.left.image.shape[0]}" if latest else "-"
-                    skew = f"{latest.skew_us}us" if latest else "-"
-                    fps = count / (now - last)
-                    log.info("%.1f pairs/s  size %s  skew %s  consumer-dropped %d  %s",
-                             fps, size, skew, rx.dropped, rx.asm.stats)
+                    size = f"{pair.left.image.shape[1]}x{pair.left.image.shape[0]}" if pair else "-"
+                    skew = f"{pair.skew_us}us" if pair else "-"
+                    log.info(
+                        "%.1f pairs/s  size %s  skew %s  consumer-dropped %d  %s",
+                        count / (now - last),
+                        size,
+                        skew,
+                        rx.dropped,
+                        rx.asm.stats,
+                    )
                     count, last = 0, now
         except KeyboardInterrupt:
             pass

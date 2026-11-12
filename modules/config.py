@@ -5,6 +5,7 @@ Precedence: command-line flag > environment variable > .env > default.
 An empty value (e.g. `GCS_MAGIC=`) means "use the default".
 See .env.example for every setting.
 """
+
 import os
 from pathlib import Path
 

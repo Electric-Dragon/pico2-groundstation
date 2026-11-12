@@ -2,6 +2,7 @@
 
 Mirrors the firmware's packed `chunk_hdr_t`. The RP2350 is little-endian.
 """
+
 import struct
 from dataclasses import dataclass
 
@@ -37,8 +38,16 @@ class ChunkHeader:
 
     def pack(self) -> bytes:
         return struct.pack(
-            HEADER_FMT, self.magic, self.version, self.cam_id, self.frame_id,
-            self.t_capture_us, self.width, self.height, self.row_start, self.row_count,
+            HEADER_FMT,
+            self.magic,
+            self.version,
+            self.cam_id,
+            self.frame_id,
+            self.t_capture_us,
+            self.width,
+            self.height,
+            self.row_start,
+            self.row_count,
         )
 
 
@@ -55,11 +64,11 @@ def parse_chunk(datagram: bytes) -> tuple[ChunkHeader, memoryview]:
     if hdr.width == 0 or hdr.height == 0 or hdr.row_count == 0:
         raise ProtocolError("zero width, height or row_count")
     if hdr.row_start + hdr.row_count > hdr.height:
-        raise ProtocolError(
-            f"rows {hdr.row_start}+{hdr.row_count} exceed height {hdr.height}")
+        raise ProtocolError(f"rows {hdr.row_start}+{hdr.row_count} exceed height {hdr.height}")
 
     payload = memoryview(datagram)[HEADER_SIZE:]
     if len(payload) != hdr.row_count * hdr.width:
         raise ProtocolError(
-            f"payload is {len(payload)} bytes, expected {hdr.row_count * hdr.width}")
+            f"payload is {len(payload)} bytes, expected {hdr.row_count * hdr.width}"
+        )
     return hdr, payload

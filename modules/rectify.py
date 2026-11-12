@@ -10,6 +10,7 @@ Run directly to view the rectified live stream:
 With --pattern, a board held in view gives a live row-mismatch reading, which
 checks that the calibration still holds (e.g. after the rig was bumped).
 """
+
 import argparse
 import logging
 import signal
@@ -62,6 +63,7 @@ def draw_rows(gray: np.ndarray, step: int = 16) -> np.ndarray:
 class Rectification:
     """Everything needed to rectify frames of one size. P1/P2 are the rectified
     projection matrices, and Q reprojects disparity to 3D (cv.reprojectImageTo3D)."""
+
     size: tuple[int, int]
     K_l: np.ndarray
     D_l: np.ndarray
@@ -84,8 +86,10 @@ class Rectification:
         return float(-self.P2[0, 3] / self.P2[0, 0])
 
     def rectify(self, left: np.ndarray, right: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        return (cv.remap(left, *self.map_l, cv.INTER_LINEAR),
-                cv.remap(right, *self.map_r, cv.INTER_LINEAR))
+        return (
+            cv.remap(left, *self.map_l, cv.INTER_LINEAR),
+            cv.remap(right, *self.map_r, cv.INTER_LINEAR),
+        )
 
     def rectify_points(self, pts: np.ndarray, right: bool = False) -> np.ndarray:
         """Where raw image points (N, 1, 2) land in the rectified image."""
@@ -135,27 +139,56 @@ class Rectifier:
         K_l = scale_K(c["K_l"], w / w0, h / h0)
         K_r = scale_K(c["K_r"], w / w0, h / h0)
         R1, R2, P1, P2, Q, _, _ = cv.stereoRectify(
-            K_l, c["D_l"], K_r, c["D_r"], size, c["R"], c["T"],
-            flags=cv.CALIB_ZERO_DISPARITY, alpha=self.alpha)
+            K_l,
+            c["D_l"],
+            K_r,
+            c["D_r"],
+            size,
+            c["R"],
+            c["T"],
+            flags=cv.CALIB_ZERO_DISPARITY,
+            alpha=self.alpha,
+        )
         return Rectification(
-            size, K_l, c["D_l"], K_r, c["D_r"], R1, R2, P1, P2, Q,
+            size,
+            K_l,
+            c["D_l"],
+            K_r,
+            c["D_r"],
+            R1,
+            R2,
+            P1,
+            P2,
+            Q,
             cv.initUndistortRectifyMap(K_l, c["D_l"], R1, P1, size, cv.CV_16SC2),
-            cv.initUndistortRectifyMap(K_r, c["D_r"], R2, P2, size, cv.CV_16SC2))
+            cv.initUndistortRectifyMap(K_r, c["D_r"], R2, P2, size, cv.CV_16SC2),
+        )
 
 
 ## ---- CLI -------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="View the rectified live stream from the Pico.")
     parser.add_argument("--calib", type=Path, default=DEFAULT_CALIB)
-    parser.add_argument("--alpha", type=float, default=config.ALPHA, help="0 = crop to valid pixels, 1 = keep all")
-    parser.add_argument("--pattern", help="inner corners as COLSxROWS: measure row mismatch on a visible board")
+    parser.add_argument(
+        "--alpha", type=float, default=config.ALPHA, help="0 = crop to valid pixels, 1 = keep all"
+    )
+    parser.add_argument(
+        "--pattern", help="inner corners as COLSxROWS: measure row mismatch on a visible board"
+    )
     parser.add_argument("--port", type=int, default=config.PORT)
     parser.add_argument("--host", default=config.HOST)
     parser.add_argument("--source", default=config.SOURCE, help="only accept chunks from this IP")
-    parser.add_argument("--headless", action="store_true", help="no window: log, and write --snapshot")
-    parser.add_argument("--snapshot", type=Path, default=DEFAULT_SNAPSHOT,
-                        help=f"headless: latest rectified pair, rewritten every 5 s (default {DEFAULT_SNAPSHOT})")
+    parser.add_argument(
+        "--headless", action="store_true", help="no window: log, and write --snapshot"
+    )
+    parser.add_argument(
+        "--snapshot",
+        type=Path,
+        default=DEFAULT_SNAPSHOT,
+        help=f"headless: latest rectified pair, rewritten every 5 s (default {DEFAULT_SNAPSHOT})",
+    )
     parser.add_argument("--scale", type=int, default=2, help="window: preview magnification")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -166,12 +199,17 @@ def main() -> None:
         sys.exit(f"{args.calib} not found: run `calibrate capture` and `calibrate solve` first")
     rect = Rectifier.from_file(args.calib, args.alpha)
     r0 = rect.at()
-    log.info("calibrated at %dx%d, rectified focal %.1f px, baseline %.1f mm",
-             *rect.calib_size, r0.focal_px, r0.baseline_mm)
+    log.info(
+        "calibrated at %dx%d, rectified focal %.1f px, baseline %.1f mm",
+        *rect.calib_size,
+        r0.focal_px,
+        r0.baseline_mm,
+    )
 
     pattern = None
     if args.pattern:
         from .calibrate import find_corners, match_orientation, parse_pattern
+
         pattern = parse_pattern(args.pattern)
     headless = args.headless or no_display()
     if headless and args.snapshot:
@@ -193,23 +231,50 @@ def main() -> None:
                         cr = find_corners(pair.right.image, pattern, fast=True)
                         if cl is not None and cr is not None:
                             cr = match_orientation(cl, cr)
-                            dy = np.abs(r.rectify_points(cl)[..., 1] - r.rectify_points(cr, right=True)[..., 1])
+                            dy = np.abs(
+                                r.rectify_points(cl)[..., 1]
+                                - r.rectify_points(cr, right=True)[..., 1]
+                            )
                             dys.append(float(dy.mean()))
-                            cv.putText(view, f"row mismatch {dys[-1]:.2f} px", (8, 20),
-                                       cv.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv.LINE_AA)
+                            cv.putText(
+                                view,
+                                f"row mismatch {dys[-1]:.2f} px",
+                                (8, 20),
+                                cv.FONT_HERSHEY_SIMPLEX,
+                                0.45,
+                                (0, 255, 255),
+                                1,
+                                cv.LINE_AA,
+                            )
                     if not headless:
-                        cv.imshow(WINDOW, cv.resize(view, None, fx=args.scale, fy=args.scale,
-                                                    interpolation=cv.INTER_NEAREST))
+                        cv.imshow(
+                            WINDOW,
+                            cv.resize(
+                                view,
+                                None,
+                                fx=args.scale,
+                                fy=args.scale,
+                                interpolation=cv.INTER_NEAREST,
+                            ),
+                        )
 
                 if not headless:
                     key = cv.waitKey(1) & 0xFF
-                    if key == ord("q") or (view is not None and cv.getWindowProperty(WINDOW, cv.WND_PROP_VISIBLE) < 1):
+                    if key == ord("q") or (
+                        view is not None and cv.getWindowProperty(WINDOW, cv.WND_PROP_VISIBLE) < 1
+                    ):
                         break
 
                 now = time.monotonic()
                 if now - last_log >= 5.0:
-                    mismatch = f"row mismatch mean {np.mean(dys):.2f} px over {len(dys)} board views" if dys else ""
-                    log.info("%.1f pairs/s  %s  %s", count / (now - last_log), rx.asm.stats, mismatch)
+                    mismatch = (
+                        f"row mismatch mean {np.mean(dys):.2f} px over {len(dys)} board views"
+                        if dys
+                        else ""
+                    )
+                    log.info(
+                        "%.1f pairs/s  %s  %s", count / (now - last_log), rx.asm.stats, mismatch
+                    )
                     if headless and view is not None and args.snapshot:
                         cv.imwrite(str(args.snapshot), view)
                     count, dys, last_log = 0, [], now
