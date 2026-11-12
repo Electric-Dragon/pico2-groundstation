@@ -1,55 +1,77 @@
-"""End-to-end demo on a synthetic scene: depth -> cloud -> floor removal -> clusters -> polytopes."""
+"""Run the full pipeline on a noisy synthetic scene and show the result.
+
+Usage: uv run python scripts/demo.py [--method hull_simple]
+"""
+
+import argparse
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.spatial import ConvexHull
 
-from polytope3d.clustering import euclidean_clusters
-from polytope3d.polytopes import aabb, contains, convex_hull, volume_of_aabb
-from polytope3d.preprocessing import remove_plane_ransac
-from polytope3d.reconstruction import depth_to_points
-from polytope3d.synthetic import render_depth
+from polytope3d.contracts import Intrinsics
+from polytope3d.metrics import containment_rate, gap_stats, total_volume
+from polytope3d.pipeline import PipelineConfig, run_pipeline
+from polytope3d.synthetic import Box, render_depth
 
-CAM = dict(fx=300.0, fy=300.0, cx=160.0, cy=120.0)
-BOXES = [((-0.5, 0.5, 2.0), (0.5, 1.0, 3.0)), ((1.0, 0.6, 3.5), (1.6, 1.0, 4.0))]
-
-depth = render_depth(240, 320, **CAM, cam_height=1.0, boxes=BOXES)
-points = depth_to_points(depth, **CAM)
-points = points[points[:, 2] < 8.0]
-rest, floor, (normal, d) = remove_plane_ransac(points)
-clusters = euclidean_clusters(rest, eps=0.1)
-
-print(f"points: {len(points)}  floor: {len(floor)}  obstacle points: {len(rest)}")
-print(f"floor normal: {np.round(normal, 3)}  clusters found: {len(clusters)}")
-for i, c in enumerate(clusters):
-    A1, b1 = aabb(c)
-    A2, b2, verts = convex_hull(c)
-    ok = contains(A1, b1, c).all() and contains(A2, b2, c).all()
-    print(f"cluster {i}: {len(c)} pts | AABB planes {len(b1)} vol {volume_of_aabb(A1, b1):.3f} m3"
-          f" | hull planes {len(b2)} | all points contained: {ok}")
+COLORS = ["tab:red", "tab:blue", "tab:green", "tab:orange"]
 
 
-def draw_aabb(ax, pts, color):
-    lo, hi = pts.min(axis=0), pts.max(axis=0)
-    corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-    for i in range(8):
-        for j in range(i + 1, 8):
-            if np.count_nonzero(corners[i] != corners[j]) == 1:
-                p, q = corners[i], corners[j]
-                ax.plot([p[0], q[0]], [p[2], q[2]], [-p[1], -q[1]], color=color)
+def draw_polytope(ax, poly, color):
+    """Draw polytope edges in the (X, Z, -Y) view used for the scatter plot."""
+    v = poly.vertices()
+    for tri in ConvexHull(v).simplices:
+        loop = np.r_[tri, tri[0]]
+        ax.plot(v[loop, 0], v[loop, 2], -v[loop, 1], color=color, linewidth=0.6)
 
 
-fig = plt.figure(figsize=(12, 5))
-ax1 = fig.add_subplot(1, 2, 1)
-im = ax1.imshow(depth, vmax=8)
-fig.colorbar(im, ax=ax1, label="depth (m)")
-ax1.set_title("Synthetic depth image")
-ax2 = fig.add_subplot(1, 2, 2, projection="3d")
-ax2.scatter(floor[::10, 0], floor[::10, 2], -floor[::10, 1], s=1, c="lightgray")
-for c, color in zip(clusters, ["tab:red", "tab:blue", "tab:green"]):
-    ax2.scatter(c[:, 0], c[:, 2], -c[:, 1], s=2, c=color)
-    draw_aabb(ax2, c, color)
-ax2.set_xlabel("X right (m)")
-ax2.set_ylabel("Z forward (m)")
-ax2.set_zlabel("height (-Y, m)")
-ax2.set_title("Floor (grey), clusters, AABBs")
-plt.tight_layout()
-plt.savefig("scratch/demo.png", dpi=150)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--method", default="hull_simple")
+    args = parser.parse_args()
+
+    k = Intrinsics(fx=300.0, fy=300.0, cx=160.0, cy=120.0, width=320, height=240)
+    boxes = [Box((-0.5, 0.5, 2.0), (0.5, 1.0, 3.0)), Box((1.0, 0.6, 3.5), (1.6, 1.0, 4.0))]
+    frame = render_depth(k, cam_height=1.0, boxes=boxes, noise_k=0.002, dropout=0.02, seed=1)
+
+    config = PipelineConfig(floor_threshold=0.02, floor_threshold_per_z2=0.006, eps=0.08)
+    result = run_pipeline(frame, config)
+
+    print("counts:", result.counts)
+    print("warnings:", result.warnings or "none")
+    print("timings (ms):", {name: round(ms, 1) for name, ms in result.timings_ms.items()})
+    for obstacle in result.obstacles:
+        print(f"\nobstacle {obstacle.id}: {len(obstacle.points)} points")
+        for name, parts in obstacle.polytopes.items():
+            gap = gap_stats(parts[0], obstacle.points)["mean"] if len(parts) == 1 else float("nan")
+            print(
+                f"  {name:12} planes {sum(p.n_planes for p in parts):4d}  "
+                f"volume {total_volume(parts):.3f} m3  mean gap {gap:.3f} m  "
+                f"contained {containment_rate(parts, obstacle.points):.3f}"
+            )
+        for name, reason in obstacle.failures.items():
+            print(f"  {name:12} FAILED: {reason}")
+
+    fig = plt.figure(figsize=(12, 5))
+    ax1 = fig.add_subplot(1, 2, 1)
+    im = ax1.imshow(frame.depth)
+    fig.colorbar(im, ax=ax1, label="depth (m)")
+    ax1.set_title("Noisy synthetic depth image")
+    ax2 = fig.add_subplot(1, 2, 2, projection="3d")
+    for obstacle, color in zip(result.obstacles, COLORS):
+        pts = obstacle.points
+        ax2.scatter(pts[::5, 0], pts[::5, 2], -pts[::5, 1], s=1, c=color)
+        for poly in obstacle.polytopes.get(args.method, []):
+            draw_polytope(ax2, poly, color)
+    ax2.set_xlabel("X right (m)")
+    ax2.set_ylabel("Z forward (m)")
+    ax2.set_zlabel("height (-Y, m)")
+    ax2.set_title(f"Obstacles and '{args.method}' polytopes")
+    plt.tight_layout()
+    Path("scratch").mkdir(exist_ok=True)
+    plt.savefig("scratch/demo.png", dpi=150)
+
+
+if __name__ == "__main__":
+    main()

@@ -33,6 +33,7 @@ class Polytope:
     obstacle_id: int = 0
     margin: float = 0.0
     n_points: int = 0
+    part_id: int = 0
 
     def __post_init__(self):
         if self.A.ndim != 2 or self.A.shape[1] != 3 or self.b.shape != (self.A.shape[0],):
