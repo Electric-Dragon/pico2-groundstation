@@ -29,6 +29,15 @@ def _int(raw: str) -> int:
     return int(raw, 0)  # accepts 0x5053 as well as 20563
 
 
+def _bool(raw: str) -> bool:
+    v = raw.lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    raise ValueError("expected true/false")
+
+
 ## ---- firmware / wire protocol ----
 PORT: int = _get("GCS_PORT", 5005, _int)
 MAGIC: int | None = _get("GCS_MAGIC", None, _int)  # None skips the check
@@ -50,6 +59,7 @@ DATA_DIR: Path = _get("GCS_DATA_DIR", Path("data"), Path)
 PATTERN: str = _get("GCS_PATTERN", "8x5")
 SQUARE_MM: float | None = _get("GCS_SQUARE_MM", None, float)
 ALPHA: float = _get("GCS_ALPHA", 0.0, float)
+FIX_K3: bool = _get("GCS_FIX_K3", False, _bool)  # hold distortion k3 at 0 in `calibrate solve`
 
 ## ---- depth (stereo matching) ----
 DEPTH_ALGO: str = _get("GCS_DEPTH_ALGO", "sgbm")  # sgbm | census-sgm | elas

@@ -129,6 +129,9 @@ uv run python -m modules.calibrate capture
 uv run python -m modules.calibrate solve --square-mm 30   # or set GCS_SQUARE_MM
 ```
 
+If the distortion fit goes wild (a large `k3`, odd focal lengths or baseline), add
+`--fix-k3` (or `GCS_FIX_K3=true`) to hold the r⁶ distortion term at 0.
+
 **4. View the rectified stream.** With `--pattern`, a board held in view shows the
 live row mismatch, which is a quick way to check the calibration still holds.
 

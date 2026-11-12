@@ -285,12 +285,18 @@ def capture(args: argparse.Namespace) -> None:
 
 
 def _calibrate_mono(
-    name: str, views: list[tuple[str, np.ndarray]], objp: np.ndarray, size: tuple[int, int]
+    name: str,
+    views: list[tuple[str, np.ndarray]],
+    objp: np.ndarray,
+    size: tuple[int, int],
+    flags: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     if len(views) < MIN_VIEWS:
         sys.exit(f"{name}: board found in only {len(views)} images, need at least {MIN_VIEWS}")
     imgpoints = [c for _, c in views]
-    rms, K, D, rvecs, tvecs = cv.calibrateCamera([objp] * len(views), imgpoints, size, None, None)
+    rms, K, D, rvecs, tvecs = cv.calibrateCamera(
+        [objp] * len(views), imgpoints, size, None, None, flags=flags
+    )
     errs = [
         float(np.sqrt(np.mean(np.sum((cv.projectPoints(objp, rv, tv, K, D)[0] - c) ** 2, axis=2))))
         for rv, tv, c in zip(rvecs, tvecs, imgpoints)
@@ -334,11 +340,14 @@ def solve(args: argparse.Namespace) -> None:
         sum(l is not None and r is not None for _, l, r in views),
     )
 
+    mono_flags = cv.CALIB_FIX_K3 if args.fix_k3 else 0
+    if args.fix_k3:
+        log.info("k3 fixed at 0")
     K_l, D_l, rms_l = _calibrate_mono(
-        "left", [(s, l) for s, l, _ in views if l is not None], objp, size
+        "left", [(s, l) for s, l, _ in views if l is not None], objp, size, mono_flags
     )
     K_r, D_r, rms_r = _calibrate_mono(
-        "right", [(s, r) for s, _, r in views if r is not None], objp, size
+        "right", [(s, r) for s, _, r in views if r is not None], objp, size, mono_flags
     )
 
     stereo = [(l, match_orientation(l, r)) for _, l, r in views if l is not None and r is not None]
@@ -458,6 +467,13 @@ def main() -> None:
         default=config.SQUARE_MM,
         required=config.SQUARE_MM is None,
         help="measured square size in mm (or GCS_SQUARE_MM in .env)",
+    )
+    sol.add_argument(
+        "--fix-k3",
+        action=argparse.BooleanOptionalAction,
+        default=config.FIX_K3,
+        help="hold the r^6 distortion term k3 at 0 (steadier fit for narrow lenses, "
+        f"default {config.FIX_K3})",
     )
     sol.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     sol.add_argument("--show", action="store_true", help="show the rectification check in a window")
