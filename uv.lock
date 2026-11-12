@@ -1138,6 +1138,7 @@ dependencies = [
     { name = "numpy" },
     { name = "open3d" },
     { name = "opencv-python" },
+    { name = "python-dotenv" },
     { name = "scipy" },
 ]
 
@@ -1145,7 +1146,6 @@ dependencies = [
 dev = [
     { name = "ipykernel" },
     { name = "pytest" },
-    { name = "python-dotenv" },
     { name = "ruff" },
 ]
 
@@ -1155,6 +1155,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "open3d", specifier = ">=0.20.0" },
     { name = "opencv-python", specifier = ">=5.0.0.93" },
+    { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "scipy", specifier = ">=1.18.1" },
 ]
 
@@ -1162,7 +1163,6 @@ requires-dist = [
 dev = [
     { name = "ipykernel", specifier = ">=7.4.0" },
     { name = "pytest", specifier = ">=9.1.1" },
-    { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "ruff", specifier = ">=0.17.2" },
 ]
 

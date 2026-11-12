@@ -6,6 +6,8 @@ The Pico captures from two hardware-synced HM01B0 cameras and streams raw 8-bit
 grayscale frames over UDP, split into row chunks. This repo is the receiving end.
 It rebuilds the frames, pairs left and right, calibrates the stereo rig,
 rectifies the pairs and computes disparity/depth with a choice of stereo matchers.
+A separate package, `polytope3d`, turns a depth image into obstacle polytopes
+(bounding shapes) for planning; it isn't wired to the live stream yet.
 
 ```
 Pico 2 W ──UDP chunks──▶ receiver ─▶ assembler ─▶ StereoPair ─▶ rectify ─▶ depth (sgbm | census-sgm | elas)
@@ -32,6 +34,16 @@ modules/
     common.py      shared cost-volume helpers (WTA, left/right check, speckles)
     cli.py         live viewer, also behind main.py
 main.py          entry point: live depth (same as python -m modules.depth)
+src/polytope3d/  depth image → point cloud → floor removal → clusters → polytopes
+  contracts.py     Intrinsics, DepthFrame (float32 metres), Plane
+  reconstruction.py  depth → 3D points (camera frame: X right, Y down, Z forward)
+  preprocessing.py   voxel downsample, outlier removal, floor plane fit
+  clustering.py      Euclidean / DBSCAN obstacle clustering
+  algos/             fitters: aabb, obb, kdop14, kdop26, hull, hull_simple, split_obb
+  pipeline.py        run_pipeline(frame, PipelineConfig) with per-stage timings
+  metrics.py, synthetic.py  volume/gap/containment metrics; synthetic test scenes
+scripts/         demo.py (pipeline on a synthetic scene), compare_algos.py
+tests/           pytest suite for polytope3d
 data/            runtime output: calibration images, calib.npz, snapshots (gitignored)
 .env.example     every setting with its default
 Dockerfile, docker-compose.yml
@@ -163,6 +175,26 @@ registered in `ALGORITHMS` in `modules/depth/__init__.py`.
   outlier images to delete.
 - A lower streaming resolution doesn't need recalibration. `rectify` rescales the
   calibration automatically. Cropping or windowing the sensor does.
+
+## Obstacle polytopes (polytope3d)
+
+`polytope3d.pipeline.run_pipeline(DepthFrame(depth_m, Intrinsics(...)))` takes a
+float32 depth image in **metres** (note `modules.depth.depth_mm` returns mm), fits
+the floor, clusters what's left and fits each cluster with the algorithms in
+`PipelineConfig.algorithms`. Its settings are placeholders until tuned on real data.
+The scripts run on synthetic scenes and save figures to `scratch/` (gitignored):
+
+```bash
+uv run python scripts/demo.py --method hull_simple
+uv run python scripts/compare_algos.py --points 20000 --repeats 10
+```
+
+## Tests and lint
+
+```bash
+uv run pytest        # polytope3d tests
+uvx ruff check .
+```
 
 ## Running with Docker
 

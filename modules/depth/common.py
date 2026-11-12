@@ -10,7 +10,7 @@ import numpy as np
 def right_view(C: np.ndarray, fill) -> np.ndarray:
     """The same costs indexed from the right image: Cr[y, xr, d] = C[y, xr + d, d].
     Entries whose left pixel would fall off the image get `fill`."""
-    H, W, D = C.shape
+    _, W, D = C.shape
     Cr = np.full_like(C, fill)
     for d in range(D):
         Cr[:, :W - d, d] = C[:, d:, d]
@@ -55,7 +55,7 @@ def winner_takes_all(C: np.ndarray, uniqueness: float = 0.0, subpixel: bool = Tr
 def lr_check(disp_l: np.ndarray, disp_r: np.ndarray, max_diff: float = 1.0) -> np.ndarray:
     """Copy of disp_l with NaN wherever the right image's disparity at the matched
     pixel disagrees by more than max_diff (occlusions and mismatches)."""
-    H, W = disp_l.shape
+    _, W = disp_l.shape
     xs = np.arange(W)[None, :] - np.nan_to_num(disp_l, nan=W)
     xr = np.rint(xs).astype(np.intp)
     inside = (xr >= 0) & (xr < W)
@@ -72,7 +72,7 @@ def remove_speckles(disp: np.ndarray, max_size: int, max_diff: float) -> np.ndar
     if max_size <= 0:
         return disp
     fixed = np.where(np.isfinite(disp), np.rint(disp * 16), -16).astype(np.int16)
-    cv.filterSpeckles(fixed, -16, max_size, int(round(max_diff * 16)))
+    cv.filterSpeckles(fixed, -16, max_size, round(max_diff * 16))
     out = disp.copy()
     out[fixed == -16] = np.nan
     return out

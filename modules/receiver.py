@@ -144,8 +144,8 @@ def main() -> None:
 
                 now = time.monotonic()
                 if now - last >= 1.0:
-                    size = f"{pair.left.image.shape[1]}x{pair.left.image.shape[0]}" if pair else "-"
-                    skew = f"{pair.skew_us}us" if pair else "-"
+                    size = f"{latest.left.image.shape[1]}x{latest.left.image.shape[0]}" if latest else "-"
+                    skew = f"{latest.skew_us}us" if latest else "-"
                     log.info(
                         "%.1f pairs/s  size %s  skew %s  consumer-dropped %d  %s",
                         count / (now - last),

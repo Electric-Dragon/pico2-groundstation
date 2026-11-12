@@ -145,7 +145,7 @@ class ELAS(StereoMatcher):
 
     def support_points(self, C: np.ndarray, Cr: np.ndarray, tex: np.ndarray) -> np.ndarray:
         """(N, 3) int array of (x, y, d) in left-image coordinates."""
-        H, W, D = C.shape
+        H, W, _ = C.shape
         step = self.candidate_step
         ys = np.arange(step, H - _MARGIN, step)
         xs = np.arange(step, W - _MARGIN, step)
