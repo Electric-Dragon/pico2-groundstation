@@ -54,3 +54,21 @@ class DepthFrame:
     def valid_mask(self):
         """True where the depth is a usable measurement (finite and > 0)."""
         return np.isfinite(self.depth) & (self.depth > 0)
+
+@dataclass(frozen=True, eq=False)
+class Plane:
+    """A plane normal . x + d = 0 with a unit-length normal. Distances are in metres."""
+
+    normal: np.ndarray
+    d: float
+
+    def __post_init__(self):
+        n = np.asarray(self.normal, dtype=np.float64)
+        if n.shape != (3,):
+            raise ValueError(f"normal must have shape (3,), got {n.shape}")
+        if abs(np.linalg.norm(n) - 1.0) > 1e-6:
+            raise ValueError("normal must have unit length")
+
+    def signed_distance(self, points):
+        """Signed distance of each point: positive on the side the normal points to."""
+        return points @ self.normal + self.d
