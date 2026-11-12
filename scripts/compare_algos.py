@@ -17,6 +17,7 @@ from polytope3d.synthetic import Box, make_box_surface_cloud
 
 ALL_FITTERS = {**ALGORITHMS, **MULTI_ALGORITHMS}
 
+SCRATCH = Path(__file__).resolve().parent.parent / "scratch"
 
 def rotated_box_cloud(n):
     pts = make_box_surface_cloud(Box((-0.5, -0.2, -0.3), (0.5, 0.2, 0.3)), n).astype(np.float64)
@@ -86,9 +87,9 @@ def main():
         ax.set_xlabel("total planes")
         ax.set_ylabel("volume / hull volume")
         ax.set_title(cloud_name)
-    Path("scratch").mkdir(exist_ok=True)
+    SCRATCH.mkdir(exist_ok=True)
     plt.tight_layout()
-    plt.savefig("scratch/pareto.png", dpi=150)
+    plt.savefig(SCRATCH / "pareto.png", dpi=150)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from polytope3d.synthetic import Box, render_depth
 
 COLORS = ["tab:red", "tab:blue", "tab:green", "tab:orange"]
 
+SCRATCH = Path(__file__).resolve().parent.parent / "scratch"
 
 def draw_polytope(ax, poly, color):
     """Draw polytope edges in the (X, Z, -Y) view used for the scatter plot."""
@@ -55,7 +56,8 @@ def main():
 
     fig = plt.figure(figsize=(12, 5))
     ax1 = fig.add_subplot(1, 2, 1)
-    im = ax1.imshow(frame.depth)
+    shown = np.where(frame.depth <= config.max_range, frame.depth, np.nan)
+    im = ax1.imshow(shown, vmin=0, vmax=config.max_range)
     fig.colorbar(im, ax=ax1, label="depth (m)")
     ax1.set_title("Noisy synthetic depth image")
     ax2 = fig.add_subplot(1, 2, 2, projection="3d")
@@ -69,9 +71,8 @@ def main():
     ax2.set_zlabel("height (-Y, m)")
     ax2.set_title(f"Obstacles and '{args.method}' polytopes")
     plt.tight_layout()
-    Path("scratch").mkdir(exist_ok=True)
-    plt.savefig("scratch/demo.png", dpi=150)
-
+    SCRATCH.mkdir(exist_ok=True)
+    plt.savefig(SCRATCH / "demo.png", dpi=150)
 
 if __name__ == "__main__":
     main()
