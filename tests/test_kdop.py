@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import pytest
 
@@ -49,7 +51,7 @@ def test_more_directions_are_never_looser():
             fit_kdop26(pts).volume(),
             fit_hull(pts).volume(),
         ]
-        assert all(a >= b - 1e-9 for a, b in zip(volumes, volumes[1:]))
+        assert all(a >= b - 1e-9 for a, b in itertools.pairwise(volumes))
 
 
 def test_sphere_gets_strictly_tighter_with_more_directions():

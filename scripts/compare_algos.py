@@ -69,7 +69,7 @@ def main():
         "sphere": sphere_cloud(args.points),
         "L-shape": l_shape_cloud(args.points),
     }
-    fig, axes = plt.subplots(1, len(clouds), figsize=(15, 4))
+    _fig, axes = plt.subplots(1, len(clouds), figsize=(15, 4))
     for ax, (cloud_name, pts) in zip(axes, clouds.items()):
         hull_volume = ALGORITHMS["hull"](pts).volume()
         print(f"\n{cloud_name} ({len(pts)} points)")

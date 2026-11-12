@@ -13,6 +13,7 @@ import socket
 import sys
 import threading
 import time
+from typing import Self
 
 import numpy as np
 
@@ -68,7 +69,7 @@ class Receiver:
             self._thread.join()
         self.sock.close()
 
-    def __enter__(self) -> "Receiver":
+    def __enter__(self) -> Self:
         return self.start()
 
     def __exit__(self, *exc) -> None:

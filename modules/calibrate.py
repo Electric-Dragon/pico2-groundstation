@@ -365,20 +365,20 @@ def solve(args: argparse.Namespace) -> None:
         float(np.linalg.norm(T)),
     )
 
-    calib = dict(
-        image_size=np.array(size),
-        K_l=K_l,
-        D_l=D_l,
-        K_r=K_r,
-        D_r=D_r,
-        R=R,
-        T=T,
-        E=E,
-        F=F,
-        rms=np.array([rms_l, rms_r, rms_s]),
-        pattern=np.array(args.pattern),
-        square_mm=np.array(args.square_mm),
-    )
+    calib = {
+        "image_size": np.array(size),
+        "K_l": K_l,
+        "D_l": D_l,
+        "K_r": K_r,
+        "D_r": D_r,
+        "R": R,
+        "T": T,
+        "E": E,
+        "F": F,
+        "rms": np.array([rms_l, rms_r, rms_s]),
+        "pattern": np.array(args.pattern),
+        "square_mm": np.array(args.square_mm),
+    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez(args.output, **calib)
     log.info("wrote %s", args.output)
