@@ -4,11 +4,11 @@ Ground station for the Pico 2 W and Arducam HM01B0 stereo vision system.
 
 The Pico captures from two hardware-synced HM01B0 cameras and streams raw 8-bit
 grayscale frames over UDP, split into row chunks. This repo is the receiving end.
-It rebuilds the frames, pairs left and right, calibrates the stereo rig and
-rectifies the pairs for stereo matching.
+It rebuilds the frames, pairs left and right, calibrates the stereo rig,
+rectifies the pairs and computes disparity/depth with a choice of stereo matchers.
 
 ```
-Pico 2 W ──UDP chunks──▶ receiver ─▶ assembler ─▶ StereoPair ─▶ rectify ─▶ (depth: not built yet)
+Pico 2 W ──UDP chunks──▶ receiver ─▶ assembler ─▶ StereoPair ─▶ rectify ─▶ depth (sgbm | census-sgm | elas)
                                                       │
                                                       └─▶ calibrate capture ─▶ data/calib/*.png
                                                             calibrate solve ─▶ data/calib.npz
@@ -24,7 +24,14 @@ modules/
   receiver.py    UDP socket + background thread, hands out the latest pair
   calibrate.py   capture board views from the live stream; solve the calibration
   rectify.py     builds rectification maps from calib.npz and applies them
-main.py          entry point (not implemented yet)
+  depth/         stereo matching: rectified pair → disparity (→ depth)
+    base.py        StereoMatcher interface; __init__.py has the registry, create()
+    sgbm.py        OpenCV StereoSGBM (default)
+    census_sgm.py  census cost + semi-global matching (numpy)
+    elas.py        ELAS: support points + triangulated prior (numpy port of libelas)
+    common.py      shared cost-volume helpers (WTA, left/right check, speckles)
+    cli.py         live viewer, also behind main.py
+main.py          entry point: live depth (same as python -m modules.depth)
 data/            runtime output: calibration images, calib.npz, snapshots (gitignored)
 .env.example     every setting with its default
 Dockerfile, docker-compose.yml
@@ -71,12 +78,16 @@ Every setting has a default in `modules/config.py` and can be overridden with a
 | `GCS_SOURCE` | unset (any) | only accept packets from this IP |
 | `GCS_PATTERN` | `8x5` | calibration board inner corners |
 | `GCS_SQUARE_MM` | unset | measured board square size |
+| `GCS_DEPTH_ALGO` | `sgbm` | stereo matcher: `sgbm`, `census-sgm` or `elas` |
+| `GCS_NUM_DISPARITIES` | `64` | disparity search range in px |
 
 See `.env.example` for the rest (receive buffer, timeouts, data folder,
-rectification crop). Precedence: command-line flag > environment variable >
+rectification crop, per-algorithm matcher settings). Precedence: command-line flag > environment variable >
 `.env` > default.
 
 ## Running (natively, e.g. on a Mac)
+
+Get the IP address for the Pico system through: `ipconfig getifaddr en0`
 
 Run from the repo root. `calibrate.py` and `rectify.py` can also be run as files,
 e.g. `uv run modules/calibrate.py ...`.
@@ -113,6 +124,32 @@ live row mismatch, which is a quick way to check the calibration still holds.
 uv run python -m modules.rectify --pattern 8x5
 ```
 
+**5. Depth.** Shows the rectified left image next to the colour-coded disparity
+(warm = near, black = no match), the matching time and the distance at the
+centre. `--algo` picks the matcher (default `sgbm`, or `GCS_DEPTH_ALGO`).
+
+```bash
+uv run main.py                          # same as: uv run python -m modules.depth
+uv run main.py --algo census-sgm
+uv run main.py --algo elas --num-disparities 48
+
+# once on a saved pair, e.g. a calibration capture (rectified with data/calib.npz,
+# or pass --rectified); writes data/disparity.png
+uv run main.py --algo elas --images data/calib/0000_L.png data/calib/0000_R.png
+```
+
+| `--algo` | Speed (320×320, 48 disparities, M-series Mac) | Notes |
+|---|---|---|
+| `sgbm` | ~10 ms | OpenCV; the most robust on low-contrast images |
+| `census-sgm` | ~250 ms | numpy; census cost tolerates gain/exposure differences between the cameras |
+| `elas` | ~200 ms | numpy; fills low-texture areas from a planar prior. On low-contrast images, raise `beta` so the prior doesn't dominate |
+
+All three return float32 disparity in pixels with NaN for no match.
+`modules.depth.depth_mm(disp, rect.focal_px, rect.baseline_mm)` turns that into
+distance, and `cv2.reprojectImageTo3D(disp, rect.Q)` into a point cloud.
+New algorithms go in `modules/depth/<name>.py` as a `StereoMatcher` subclass,
+registered in `ALGORITHMS` in `modules/depth/__init__.py`.
+
 ### Calibration tips
 
 - Print a chessboard with **9×6 squares** (8×5 inner corners), mount it on
@@ -147,6 +184,9 @@ docker compose run --rm gcs python -m modules.calibrate solve
 
 # rectified stream: logs, and rewrites data/rectified.png every 5 s
 docker compose run --rm --service-ports gcs python -m modules.rectify --headless --pattern 8x5
+
+# depth: logs, and rewrites data/disparity.png every 5 s
+docker compose run --rm --service-ports gcs python main.py --headless --algo elas
 ```
 
 Notes:

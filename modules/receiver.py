@@ -126,14 +126,19 @@ def main() -> None:
         import cv2 as cv
 
     with Receiver(args.port, args.host, args.source) as rx:
-        count, last = 0, time.monotonic()
+        count, last, latest, fps = 0, time.monotonic(), None, 0.0
         try:
             while True:
                 pair = rx.get(timeout=0.1)
                 if pair is not None:
                     count += 1
+                    latest = pair
                     if args.show:
-                        cv.imshow("left | right", np.hstack([pair.left.image, pair.right.image]))
+                        view = np.hstack([pair.left.image, pair.right.image])
+                        label = f"{fps:.1f} fps"
+                        cv.putText(view, label, (8, 22), cv.FONT_HERSHEY_SIMPLEX, 0.6, 0, 3, cv.LINE_AA)
+                        cv.putText(view, label, (8, 22), cv.FONT_HERSHEY_SIMPLEX, 0.6, 255, 1, cv.LINE_AA)
+                        cv.imshow("left | right", view)
                 if args.show and cv.waitKey(1) & 0xFF == ord("q"):
                     break
 
