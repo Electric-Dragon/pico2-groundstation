@@ -12,6 +12,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
     PATH="/app/.venv/bin:$PATH"
 
 ## Dependencies first, so code changes don't reinstall them.

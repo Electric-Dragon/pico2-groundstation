@@ -7,11 +7,13 @@ grayscale frames over UDP, split into row chunks. This repo is the receiving end
 It rebuilds the frames, pairs left and right, calibrates the stereo rig,
 rectifies the pairs and computes disparity/depth with a choice of stereo matchers.
 A separate package, `polytope3d`, turns a depth image into obstacle polytopes
-(bounding shapes) for planning; it isn't wired to the live stream yet.
+(bounding shapes) for planning; `modules/obstacles.py` feeds it the live depth
+(`main.py --obstacles`).
 
 ```
 Pico 2 W ──UDP chunks──▶ receiver ─▶ assembler ─▶ StereoPair ─▶ rectify ─▶ depth (sgbm | census-sgm | elas)
-                                                      │
+                                                      │                                   │ --obstacles
+                                                      │                     obstacles ─▶ polytope3d ─▶ polytopes
                                                       └─▶ calibrate capture ─▶ data/calib/*.png
                                                             calibrate solve ─▶ data/calib.npz
 ```
@@ -33,6 +35,7 @@ modules/
     elas.py        ELAS: support points + triangulated prior (numpy port of libelas)
     common.py      shared cost-volume helpers (WTA, left/right check, speckles)
     cli.py         live viewer, also behind main.py
+  obstacles.py   disparity → DepthFrame (metres, rectified intrinsics) → polytope3d; drawing
 main.py          entry point: live depth (same as python -m modules.depth)
 src/polytope3d/  depth image → point cloud → floor removal → clusters → polytopes
   contracts.py     Intrinsics, DepthFrame (float32 metres), Plane
@@ -185,6 +188,21 @@ registered in `ALGORITHMS` in `modules/depth/__init__.py`.
 float32 depth image in **metres** (note `modules.depth.depth_mm` returns mm), fits
 the floor, clusters what's left and fits each cluster with the algorithms in
 `PipelineConfig.algorithms`. Its settings are placeholders until tuned on real data.
+
+On the live stream, `--obstacles` converts each disparity map to a `DepthFrame`
+(`modules/obstacles.py`, intrinsics from the rectified `P1`), runs the pipeline
+with one fitter and outlines each obstacle on the left image, labelled with the
+distance to its nearest point. Headless, it logs the obstacle count and distances.
+
+```bash
+uv run main.py --obstacles                           # aabb boxes, depth up to 4 m
+uv run main.py --obstacles --obstacle-algo hull_simple --max-range 3
+uv run main.py --obstacles --images data/calib/0000_L.png data/calib/0000_R.png
+```
+
+`GCS_OBSTACLE_ALGO` and `GCS_OBSTACLE_MAX_RANGE` set the defaults. Floor fitting
+assumes the camera is roughly level (Y down); without a floor, everything in range
+counts as an obstacle.
 The scripts run on synthetic scenes and save figures to `scratch/` (gitignored):
 
 ```bash

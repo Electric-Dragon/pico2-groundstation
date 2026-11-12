@@ -72,3 +72,7 @@ SGM_PATHS: int = _get("GCS_SGM_PATHS", 8, _int)
 
 if CAM_LEFT == CAM_RIGHT:
     raise SystemExit(f"GCS_CAM_LEFT and GCS_CAM_RIGHT are both {CAM_LEFT}")
+
+## ---- obstacles (polytope3d on live depth, `modules.depth --obstacles`) ----
+OBSTACLE_ALGO: str = _get("GCS_OBSTACLE_ALGO", "aabb")  # aabb|obb|kdop14|kdop26|hull|hull_simple|split_obb
+OBSTACLE_MAX_RANGE: float = _get("GCS_OBSTACLE_MAX_RANGE", 4.0, float)  # metres; stereo error grows with Z²

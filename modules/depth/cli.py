@@ -8,6 +8,8 @@ The window shows the rectified left image next to the colour-coded disparity
 distance at the centre cross. Headless, it logs and rewrites --snapshot every 5 s.
 --images runs once on a pair from disk (e.g. data/calib/0000_L.png and _R.png)
 and writes --snapshot; the pair is rectified with --calib unless --rectified.
+--obstacles also runs polytope3d on each depth image and outlines the obstacles
+on the left image (with the distance to each one's nearest point).
 """
 import argparse
 import logging
@@ -19,7 +21,7 @@ from pathlib import Path
 import cv2 as cv
 import numpy as np
 
-from .. import config
+from .. import config, obstacles
 from ..rectify import DEFAULT_CALIB, Rectification, Rectifier
 from . import ALGORITHMS, StereoMatcher, create, depth_mm
 
@@ -65,6 +67,15 @@ def timed(matcher: StereoMatcher, left: np.ndarray, right: np.ndarray) -> tuple[
     return disp, (time.perf_counter() - t0) * 1000
 
 
+def add_obstacles(view: np.ndarray, disp: np.ndarray, r: Rectification, args,
+                  frame_id: int = 0, t_capture_us: int = 0):
+    """Run polytope3d on this frame's depth and draw the result into `view`."""
+    frame = obstacles.to_depth_frame(disp, r, frame_id, t_capture_us)
+    result = obstacles.run_pipeline(frame, args.pipeline)
+    obstacles.draw(view, result, frame.intrinsics, args.obstacle_algo)
+    return result
+
+
 def run_images(args, matcher: StereoMatcher) -> None:
     left, right = (cv.imread(str(p), cv.IMREAD_GRAYSCALE) for p in args.images)
     for p, img in zip(args.images, (left, right)):
@@ -79,8 +90,14 @@ def run_images(args, matcher: StereoMatcher) -> None:
     disp, ms = timed(matcher, left, right)
     log.info("%s: %.0f ms, %.0f%% valid, disparity %.1f..%.1f px", matcher.name, ms,
              100 * np.isfinite(disp).mean(), np.nanmin(disp), np.nanmax(disp))
+    view = render(left, disp, matcher, ms, r)
+    if args.obstacles:
+        if r is None:
+            sys.exit("--obstacles needs the calibration for distances: drop --rectified")
+        result = add_obstacles(view, disp, r, args)
+        log.info("obstacles: %s", obstacles.summary(result))
     args.snapshot.parent.mkdir(parents=True, exist_ok=True)
-    cv.imwrite(str(args.snapshot), render(left, disp, matcher, ms, r))
+    cv.imwrite(str(args.snapshot), view)
     log.info("wrote %s", args.snapshot)
 
 
@@ -94,7 +111,7 @@ def run_live(args, matcher: StereoMatcher) -> None:
     if headless:
         args.snapshot.parent.mkdir(parents=True, exist_ok=True)
 
-    count, times, view = 0, [], None
+    count, times, view, result = 0, [], None, None
     last_log = time.monotonic()
     try:
         with Receiver(args.port, args.host, args.source) as rx:
@@ -107,6 +124,9 @@ def run_live(args, matcher: StereoMatcher) -> None:
                     disp, ms = timed(matcher, left, right)
                     times.append(ms)
                     view = render(left, disp, matcher, ms, r)
+                    if args.obstacles:
+                        result = add_obstacles(view, disp, r, args, pair.frame_id,
+                                               pair.left.t_capture_us)
                     if not headless:
                         cv.imshow(WINDOW, cv.resize(view, None, fx=args.scale, fy=args.scale,
                                                     interpolation=cv.INTER_NEAREST))
@@ -121,6 +141,8 @@ def run_live(args, matcher: StereoMatcher) -> None:
                     match = f"match {np.mean(times):.0f} ms" if times else ""
                     log.info("%.1f pairs/s  %s  consumer-dropped %d  %s",
                              count / (now - last_log), match, rx.dropped, rx.asm.stats)
+                    if result is not None:
+                        log.info("obstacles: %s", obstacles.summary(result))
                     if headless and view is not None:
                         cv.imwrite(str(args.snapshot), view)
                     count, times, last_log = 0, [], now
@@ -148,6 +170,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--snapshot", type=Path, default=DEFAULT_SNAPSHOT,
                         help=f"output image: headless (every 5 s) or --images (default {DEFAULT_SNAPSHOT})")
     parser.add_argument("--scale", type=int, default=2, help="window: preview magnification")
+    parser.add_argument("--obstacles", action="store_true",
+                        help="also fit obstacle polytopes (polytope3d) and outline them")
+    parser.add_argument("--obstacle-algo", choices=obstacles.FITTERS, default=config.OBSTACLE_ALGO,
+                        help=f"polytope fitter for --obstacles (default {config.OBSTACLE_ALGO})")
+    parser.add_argument("--max-range", type=float, default=config.OBSTACLE_MAX_RANGE,
+                        help=f"--obstacles: ignore depth beyond this, m (default {config.OBSTACLE_MAX_RANGE})")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ## `docker stop` sends SIGTERM, which PID 1 otherwise ignores.
@@ -158,6 +186,12 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as e:  # bad settings, e.g. from .env
         sys.exit(str(e))
     log.info("depth algorithm: %r", matcher)
+    if args.obstacles:
+        try:
+            args.pipeline = obstacles.pipeline_config(args.obstacle_algo, args.max_range)
+        except ValueError as e:
+            sys.exit(f"--obstacles: {e}")
+        log.info("obstacles: %s, max range %.1f m", args.obstacle_algo, args.max_range)
     if args.images:
         run_images(args, matcher)
     else:
