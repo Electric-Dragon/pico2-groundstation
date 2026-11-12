@@ -1,73 +1,82 @@
 import numpy as np
 import pytest
-from scipy.sparse.csgraph import connected_components
 
-from polytope3d.clustering import dbscan_labels, euclidean_labels, group_clusters
-from polytope3d.preprocessing import fit_floor_plane, split_by_plane
+from polytope3d.clustering import (
+    cluster_indices,
+    dbscan_labels,
+    euclidean_labels,
+    propagate_labels,
+)
+from polytope3d.preprocessing import fit_floor_plane, split_by_plane, voxel_downsample
 from polytope3d.reconstruction import depth_to_points
 
 
+def blob(center, n=1500, size=0.2, seed=0):
+    rng = np.random.default_rng(seed)
+    return (rng.uniform(-size / 2, size / 2, size=(n, 3)) + center).astype(np.float32)
+
+
 def two_blobs_with_bridge():
-    rng = np.random.default_rng(0)
-    left = rng.uniform(0.0, 0.4, size=(4000, 3))
-    right = rng.uniform(0.0, 0.4, size=(4000, 3)) + [1.0, 0.0, 0.0]
-    bridge = np.column_stack([np.linspace(0.42, 0.98, 15), np.full(15, 0.2), np.full(15, 0.2)])
-    return np.vstack([left, right, bridge]).astype(np.float32)
+    a = blob((0.0, 0.0, 0.0), seed=1)
+    b = blob((1.1, 0.0, 0.0), seed=2)
+    x = np.arange(0.1, 1.0, 0.03)
+    bridge = np.column_stack([x, np.zeros_like(x), np.zeros_like(x)]).astype(np.float32)
+    return np.vstack([a, b, bridge])
 
 
-def test_bridge_merges_euclidean_but_not_dbscan():
+def test_two_separate_blobs():
+    pts = np.vstack([blob((0, 0, 0), seed=1), blob((2, 0, 0), n=900, seed=2)])
+    for fn in (euclidean_labels, dbscan_labels):
+        labels = fn(pts, eps=0.05, min_points=10)
+        assert labels.max() == 1 and (labels >= 0).all()
+        assert np.bincount(labels).tolist() == [1500, 900]
+
+
+def test_euclidean_chains_through_bridge_but_dbscan_does_not():
     pts = two_blobs_with_bridge()
-    assert len(group_clusters(pts, euclidean_labels(pts, 0.05), 100)) == 1
-    assert len(group_clusters(pts, dbscan_labels(pts, 0.05, 15), 100)) == 2
+    assert euclidean_labels(pts, eps=0.05, min_points=10).max() == 0
+    labels = dbscan_labels(pts, eps=0.05, min_points=10)
+    assert labels.max() == 1
+    assert len(set(labels[:1500]) - {-1}) == 1 and len(set(labels[1500:3000]) - {-1}) == 1
+    assert labels[0] != labels[1500]
 
 
-def test_dbscan_matches_brute_force():
-    rng = np.random.default_rng(1)
-    pts = np.vstack(
-        [rng.normal(0, 0.1, (150, 3)), rng.normal(2, 0.1, (150, 3)), rng.uniform(-1, 3, (30, 3))]
-    )
-    eps, m = 0.15, 5
-    labels = dbscan_labels(pts, eps, m)
-    dist = np.linalg.norm(pts[:, None] - pts[None], axis=2)
-    adj = dist <= eps
-    core = adj.sum(axis=1) >= m
-    noise = ~core & ~(adj[:, core]).any(axis=1)
-    np.testing.assert_array_equal(labels == -1, noise)
-    same = labels[:, None] == labels[None, :]
-    comp = connected_components(adj[np.ix_(core, core)], directed=False)[1]
-    np.testing.assert_array_equal(same[np.ix_(core, core)], comp[:, None] == comp[None, :])
+def test_small_group_is_noise():
+    pts = np.vstack([blob((0, 0, 0)), blob((3, 0, 0), n=5, seed=3)])
+    labels = euclidean_labels(pts, eps=0.05, min_points=20)
+    assert (labels[1500:] == -1).all() and labels.max() == 0
 
 
-def test_group_clusters_sorted_and_filtered():
-    pts = np.zeros((10, 3), dtype=np.float32)
-    labels = np.array([1, 1, 1, 0, 0, -1, 2, 1, 1, 1], dtype=np.int32)
-    groups = group_clusters(pts, labels, min_points=2)
-    assert [len(g) for g in groups] == [6, 2]
+def test_isolated_point_is_noise_and_border_point_joins():
+    pts = np.vstack([blob((0, 0, 0)), [[5.0, 5.0, 5.0]], [[0.13, 0.0, 0.0]]]).astype(np.float32)
+    labels = dbscan_labels(pts, eps=0.05, min_points=10)
+    assert labels[1500] == -1
+    assert labels[0] >= 0 and labels[1501] == labels[0]
 
 
-def test_empty_input():
-    empty = np.empty((0, 3), dtype=np.float32)
-    assert euclidean_labels(empty, 0.1).shape == (0,)
-    assert dbscan_labels(empty, 0.1, 3).shape == (0,)
-    assert group_clusters(empty, np.empty(0, dtype=np.int32)) == []
-
-
-def test_bad_parameters():
-    pts = np.zeros((3, 3), dtype=np.float32)
+def test_empty_and_bad_arguments():
+    assert len(euclidean_labels(np.empty((0, 3), dtype=np.float32))) == 0
+    assert len(dbscan_labels(np.empty((0, 3), dtype=np.float32))) == 0
     with pytest.raises(ValueError):
-        euclidean_labels(pts, 0.0)
+        euclidean_labels(np.zeros((4, 2)))
     with pytest.raises(ValueError):
-        dbscan_labels(pts, 0.1, 0)
+        dbscan_labels(np.zeros((4, 3)), eps=0.0)
 
 
-@pytest.mark.parametrize("method", ["euclidean", "dbscan"])
-def test_scene_has_two_obstacles(scene_frame, method):
+def test_cluster_indices():
+    labels = np.array([0, 1, -1, 0, 1, 1])
+    parts = cluster_indices(labels)
+    assert [p.tolist() for p in parts] == [[0, 3], [1, 4, 5]]
+
+
+def test_scene_gives_two_clusters_and_labels_propagate(scene_frame):
     pts = depth_to_points(scene_frame)
     above, _, _ = split_by_plane(pts, fit_floor_plane(pts))
-    if method == "euclidean":
-        labels = euclidean_labels(above, 0.1)
-    else:
-        labels = dbscan_labels(above, 0.1, 10)
-    clusters = group_clusters(above, labels, min_points=50)
-    assert len(clusters) == 2
-    assert len(clusters[0]) > len(clusters[1])
+    coarse = voxel_downsample(above, 0.03)
+    for fn, min_points in ((euclidean_labels, 10), (dbscan_labels, 3)):
+        coarse_labels = fn(coarse, eps=0.06, min_points=min_points)
+        assert coarse_labels.max() == 1
+        fine = propagate_labels(coarse, coarse_labels, above, max_dist=0.06)
+        assert (fine >= 0).all()
+        for k in range(2):
+            assert (fine == k).sum() > (coarse_labels == k).sum()
